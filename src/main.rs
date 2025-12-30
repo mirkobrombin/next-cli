@@ -1,5 +1,4 @@
-use bottles_core::proto::NotifyRequest;
-pub use bottles_core::proto::{HealthRequest, bottles_client::BottlesClient};
+use bottles_core::proto::bottles::{management_client::ManagementClient, CreateBottleRequest, DeleteBottleRequest, ListBottlesRequest};
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
@@ -12,13 +11,15 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    #[command(about = "Check the health of the server")]
-    Health,
-    #[command(about = "Notify the server")]
-    Notify {
-        #[arg(help = "The message to send")]
-        message: String,
+    Create {
+        name: String,
+        #[arg(short, long, default_value = "Gaming")]
+        r#type: String,
     },
+    Delete {
+        name: String,
+    },
+    List,
 }
 
 #[tokio::main]
@@ -28,28 +29,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let args = Cli::parse();
+    // Connect to Server
     let url = "http://[::1]:50052";
-    let mut client = BottlesClient::connect(url).await?;
+    let mut client = ManagementClient::connect(url).await?;
 
     match args.command {
-        Command::Health => {
-            let request = HealthRequest {};
-            let response = client.health(request).await?;
-            let response = response.get_ref();
-            if response.ok {
-                tracing::info!("Server is healthy");
+        Command::Create { name, r#type } => {
+            let request = CreateBottleRequest {
+                name,
+                r#type,
+                runner: String::new(),
+            };
+            let response = client.create_bottle(request).await?;
+            let bottle = response.get_ref();
+            println!("Created bottle: {} ({}) at {}", bottle.name, bottle.r#type, bottle.path);
+        }
+        Command::Delete { name } => {
+            let request = DeleteBottleRequest { name };
+            let response = client.delete_bottle(request).await?;
+            if response.get_ref().success {
+                println!("Deleted bottle successfully");
             } else {
-                tracing::info!("Server is unhealthy");
+                eprintln!("Failed to delete bottle: {}", response.get_ref().error_message);
             }
         }
-        Command::Notify { message } => {
-            let request = NotifyRequest { message };
-            let response = client.notify(request).await?;
-            let response = response.get_ref();
-            if response.success {
-                tracing::info!("Message sent successfully");
-            } else {
-                tracing::info!("Failed to send message");
+        Command::List => {
+            let request = ListBottlesRequest {};
+            let response = client.list_bottles(request).await?;
+            let list = response.get_ref();
+            println!("Bottles:");
+            for bottle in &list.bottles {
+                println!("- {} ({}) [{}]", bottle.name, bottle.r#type, if bottle.active { "Running" } else { "Stopped" });
             }
         }
     }
