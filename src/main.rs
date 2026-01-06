@@ -1,4 +1,4 @@
-use bottles_core::proto::bottles::{management_client::ManagementClient, CreateBottleRequest, DeleteBottleRequest, ListBottlesRequest};
+use bottles_core::proto::bottles::{management_client::ManagementClient, CreateBottleRequest, DeleteBottleRequest, ListBottlesRequest, BottleRequest};
 use clap::{Parser, Subcommand};
 use tracing_subscriber::EnvFilter;
 
@@ -20,6 +20,15 @@ enum Command {
         name: String,
     },
     List,
+    Start {
+        name: String,
+    },
+    Stop {
+        name: String,
+    },
+    Restart {
+        name: String,
+    },
 }
 
 #[tokio::main]
@@ -60,6 +69,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             println!("Bottles:");
             for bottle in &list.bottles {
                 println!("- {} ({}) [{}]", bottle.name, bottle.r#type, if bottle.active { "Running" } else { "Stopped" });
+            }
+        }
+        Command::Start { name } => {
+            let request = BottleRequest { name };
+            let response = client.start_bottle(request).await?;
+            if response.get_ref().success {
+                println!("Bottle started successfully");
+            } else {
+                eprintln!("Failed to start bottle: {}", response.get_ref().error_message);
+            }
+        }
+        Command::Stop { name } => {
+            let request = BottleRequest { name };
+            let response = client.stop_bottle(request).await?;
+            if response.get_ref().success {
+                println!("Bottle stopped successfully");
+            } else {
+                eprintln!("Failed to stop bottle: {}", response.get_ref().error_message);
+            }
+        }
+        Command::Restart { name } => {
+            let request = BottleRequest { name };
+            let response = client.restart_bottle(request).await?;
+            if response.get_ref().success {
+                println!("Bottle restarted successfully");
+            } else {
+                eprintln!("Failed to restart bottle: {}", response.get_ref().error_message);
             }
         }
     }
